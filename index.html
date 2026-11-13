@@ -56,6 +56,7 @@ button:focus-visible,input:focus-visible,.cell:focus-visible{outline:3px solid #
   <div id="board" role="grid"></div>
   <div id="rack"></div>
   <div class="bar" style="gap:.5rem">
+    <button id="bSwap">Échanger la tuile choisie</button>
     <button id="bPass">Passer mon tour</button>
     <button id="bQuit">Quitter</button>
   </div>
@@ -212,6 +213,15 @@ function play(r, c) {
   if (!rack.length && !S.bag.length) S.over = true;
   S.t = 1 - S.t; sel = -1; save();
 }
+$("bSwap").onclick = () => {
+  if (!S || S.over || S.t !== me_()) return;
+  if (sel < 0) return say("Choisis d’abord la tuile à échanger.", true);
+  if (!S.bag.length) return say("La pioche est vide : impossible d’échanger.", true);
+  const rack = S.p[S.t].r, old = rack[sel], nv = S.bag.pop();
+  rack[sel] = nv; S.bag.push(old); shuffle(S.bag);
+  S.pass = 0; S.log = S.p[S.t].n + " échange une tuile.";
+  S.t = 1 - S.t; sel = -1; save();
+};
 $("bPass").onclick = () => {
   if (!S || S.over || S.t !== me_()) return;
   S.pass++; S.log = S.p[S.t].n + " passe son tour.";
@@ -249,6 +259,7 @@ function render() {
     $("rack").appendChild(b);
   });
   $("bPass").disabled = !myTurn;
+  $("bSwap").disabled = !myTurn || !S.bag.length;
   if (!S.p[1].n) say("En attente d’un adversaire — code : " + (window._code || ""));
   else if (S.over) {
     const [a, b] = S.p;
