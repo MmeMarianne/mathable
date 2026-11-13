@@ -62,7 +62,7 @@ button:focus-visible,input:focus-visible,.cell:focus-visible{outline:3px solid #
     <button id="bQuit">Quitter</button>
   </div>
   <div id="over"></div>
-  <p class="legend">Choisis une tuile puis une case vide. Le nombre posé doit être le résultat (+, −, ×, ÷) de deux tuiles alignées et collées à la case : les deux du même côté, ou une de chaque côté. Cases bleues ×2, orange ×3, violettes : seule l’opération indiquée compte. Chaque calcul valide rapporte la valeur de la tuile.</p>
+  <p class="legend">Choisis une tuile puis une case vide. Le nombre posé doit être le résultat (+, −, ×, ÷) de deux tuiles alignées et collées à la case : les deux du même côté, ou une de chaque côté. Cases bleues ×2, orange ×3, violettes : seule l’opération indiquée compte. Chaque calcul valide rapporte la valeur de la tuile + 2 points.</p>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -98,7 +98,7 @@ const QUAD = [
 ];
 const bagCounts = () => {
   const c = {};
-  for (let i = 0; i <= 9; i++) c[i] = 6;
+  for (let i = 1; i <= 9; i++) c[i] = 6; // pas de 0 : il ne rapporterait aucun point
   for (let i = 10; i <= 20; i++) c[i] = 2;
   [21,24,25,27,28,30,32,35,36,40,42,45,48,49,54,56,63,64,72,81,90].forEach(v => c[v] = 1);
   return c;
@@ -220,7 +220,7 @@ function play(r, c) {
 }
 function points(r, c, v) {
   const n = evaluate(S.b, r, c, v), sp = special(r, c);
-  return {n, pts: v * n * (sp === "2" ? 2 : sp === "3" ? 3 : 1)};
+  return {n, pts: (v + 2) * n * (sp === "2" ? 2 : sp === "3" ? 3 : 1)}; // chaque calcul : valeur + 2
 }
 function commit(r, c, i) { // applique un coup déjà validé (humain ou ordinateur)
   const rack = S.p[S.t].r, v = rack[i], {n, pts} = points(r, c, v);
