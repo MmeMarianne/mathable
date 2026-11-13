@@ -84,7 +84,7 @@ const firebaseConfig = {
 
 /* ========= 2. RÈGLES DU JEU (modifiables) ========= */
 const N = 14, RACK = 7;
-const CENTER = {"6_6":5,"6_7":6,"7_6":7,"7_7":8}; // tuiles de départ
+const CENTER = {"6_6":0,"6_7":0,"7_6":0,"7_7":0}; // positions des 4 tuiles de départ (valeurs tirées au hasard)
 // Quart supérieur gauche (7x7), miroir pour le reste. 3=×3 2=×2 + - x / = opération imposée
 const QUAD = [
   "3..2..3",
@@ -138,8 +138,13 @@ function newState(name) {
   const c = bagCounts();
   for (const v in c) for (let i = 0; i < c[v]; i++) bag.push(+v);
   shuffle(bag);
+  const b = {};
+  Object.keys(CENTER).forEach(k => { // 4 tuiles centrales aléatoires, de 1 à 9
+    const i = bag.findIndex(v => v >= 1 && v <= 9);
+    b[k] = bag.splice(i, 1)[0];
+  });
   const p = [{n: name, s: 0, r: bag.splice(0, RACK)}, {n: "", s: 0, r: bag.splice(0, RACK)}];
-  return {p, bag, b: {...CENTER}, t: 0, pass: 0, over: false, last: "", log: ""};
+  return {p, bag, b, t: 0, pass: 0, over: false, last: "", log: ""};
 }
 function normalize(s) {
   if (!s) return null;
