@@ -65,16 +65,20 @@ button:focus-visible,input:focus-visible,.cell:focus-visible{outline:3px solid #
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics-compat.js"></script>
 <script>
 /* ========= 1. CONFIGURATION FIREBASE (à remplir) =========
    Console Firebase > Ajouter une app Web > copier l'objet firebaseConfig.
    Crée aussi une "Realtime Database" (dans la région de ton choix). */
 const firebaseConfig = {
-  apiKey: "VOTRE_API_KEY",
-  authDomain: "VOTRE_PROJET.firebaseapp.com",
-  databaseURL: "https://VOTRE_PROJET-default-rtdb.firebaseio.com",
-  projectId: "VOTRE_PROJET",
-  appId: "VOTRE_APP_ID"
+  apiKey: "AIzaSyDkQm6Vanw7_9aeT6Nvn9BaPLUr5q1k2uE",
+  authDomain: "mathable-a2170.firebaseapp.com",
+  databaseURL: "https://mathable-a2170-default-rtdb.firebaseio.com",
+  projectId: "mathable-a2170",
+  storageBucket: "mathable-a2170.firebasestorage.app",
+  messagingSenderId: "135327682380",
+  appId: "1:135327682380:web:e6341e749cc5894fb509e9",
+  measurementId: "G-MK9DER6B04"
 };
 
 /* ========= 2. RÈGLES DU JEU (modifiables) ========= */
@@ -145,7 +149,11 @@ function normalize(s) {
 /* ========= 4. ÉTAT & SYNCHRO ========= */
 let S = null, me = 0, mode = null, ref = null, db = null, sel = -1;
 const fbOK = !firebaseConfig.apiKey.startsWith("VOTRE");
-if (fbOK) { firebase.initializeApp(firebaseConfig); db = firebase.database(); }
+if (fbOK) {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.database();
+  try { firebase.analytics(); } catch (e) { /* Analytics facultatif */ }
+}
 else $("fbInfo").textContent = "Firebase n’est pas configuré : seul le mode « même écran » fonctionne.";
 
 function save() { if (mode === "online") ref.set(S); else render(); }
