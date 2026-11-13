@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mathable</title>
+<style>
+:root{--paper:#f3efe4;--ink:#1d2a33;--board:#dfe6d8;--tile:#fbf7ea;--tileEdge:#b9ad8a;--x2:#9cc7e8;--x3:#e9a07a;--op:#d8cdf0;--me:#1f6f6b;--warn:#b3402a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Trebuchet MS","Segoe UI",sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+h1{font-family:Georgia,serif;font-size:1.6rem;margin:.6rem 0 .2rem;letter-spacing:.02em}
+button{font:inherit;border:2px solid var(--ink);background:var(--tile);color:var(--ink);padding:.45rem .9rem;border-radius:6px;cursor:pointer}
+button:hover{background:#fff}
+button.main{background:var(--me);color:#fff;border-color:var(--me)}
+input{font:inherit;padding:.45rem .6rem;border:2px solid var(--ink);border-radius:6px;background:#fff;width:100%}
+button:focus-visible,input:focus-visible,.cell:focus-visible{outline:3px solid #e0a100;outline-offset:1px}
+#lobby{max-width:420px;width:92%;display:grid;gap:.7rem;margin-top:1rem}
+#lobby .row{display:flex;gap:.5rem}
+#lobby small{color:#55656f}
+#game{display:none;flex-direction:column;align-items:center;width:100%}
+.bar{display:flex;gap:.6rem;align-items:stretch;justify-content:center;flex-wrap:wrap;margin:.3rem 0;width:96%;max-width:760px}
+.pl{flex:1;min-width:130px;border:2px solid var(--tileEdge);border-radius:8px;padding:.3rem .6rem;background:var(--tile)}
+.pl.turn{border-color:var(--me);box-shadow:0 0 0 2px var(--me)}
+.pl b{display:block}.pl span{font-size:1.5rem;font-family:Georgia,serif}
+#msg{min-height:1.4em;font-size:.95rem;text-align:center}
+#msg.err{color:var(--warn)}
+#board{--s:min(calc((100vw - 14px)/14),calc((100vh - 270px)/14),42px);display:grid;grid-template-columns:repeat(14,var(--s));grid-template-rows:repeat(14,var(--s));gap:1px;background:var(--tileEdge);border:2px solid var(--tileEdge)}
+.cell{background:var(--board);display:flex;align-items:center;justify-content:center;font-size:calc(var(--s)*.48);font-weight:700;position:relative;cursor:pointer;user-select:none}
+.cell.x2{background:var(--x2)}.cell.x3{background:var(--x3)}.cell.op{background:var(--op)}
+.cell i{font-style:normal;font-size:calc(var(--s)*.34);font-weight:700;opacity:.75}
+.cell.t{background:var(--tile);box-shadow:inset 0 0 0 2px var(--tileEdge);cursor:default}
+.cell.last{box-shadow:inset 0 0 0 3px var(--me)}
+#rack{display:flex;gap:6px;margin:.6rem 0;flex-wrap:wrap;justify-content:center}
+.rt{width:48px;height:56px;font-size:1.5rem;font-weight:700;background:var(--tile);border:2px solid var(--tileEdge);border-radius:6px;padding:0}
+.rt.sel{border-color:var(--me);background:#e4f2ef;transform:translateY(-6px)}
+.rt:disabled{opacity:.5;cursor:default}
+.legend{font-size:.78rem;color:#55656f;text-align:center;max-width:700px;padding:0 .5rem}
+#over{font-family:Georgia,serif;font-size:1.3rem;margin:.4rem}
+@media(prefers-reduced-motion:no-preference){.rt{transition:transform .12s}}
+</style>
+</head>
+<body>
+<h1>Mathable</h1>
+
+<div id="lobby">
+  <input id="name" placeholder="Ton prénom" maxlength="16" autocomplete="off">
+  <div class="row"><button class="main" id="bCreate">Créer une partie</button></div>
+  <div class="row"><input id="code" placeholder="Code de la partie" maxlength="5" autocomplete="off"><button id="bJoin">Rejoindre</button></div>
+  <button id="bLocal">Jouer à deux sur le même écran</button>
+  <small id="fbInfo"></small>
+</div>
+
+<div id="game">
+  <div class="bar" id="players"></div>
+  <div id="msg"></div>
+  <div id="board" role="grid"></div>
+  <div id="rack"></div>
+  <div class="bar" style="gap:.5rem">
+    <button id="bPass">Passer mon tour</button>
+    <button id="bQuit">Quitter</button>
+  </div>
+  <div id="over"></div>
+  <p class="legend">Choisis une tuile puis une case vide. Le nombre posé doit être le résultat (+, −, ×, ÷) de deux tuiles alignées et collées à la case : les deux du même côté, ou une de chaque côté. Cases bleues ×2, orange ×3, violettes : seule l’opération indiquée compte. Chaque calcul valide rapporte la valeur de la tuile.</p>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+/* ========= 1. CONFIGURATION FIREBASE (à remplir) =========
+   Console Firebase > Ajouter une app Web > copier l'objet firebaseConfig.
+   Crée aussi une "Realtime Database" (dans la région de ton choix). */
+const firebaseConfig = {
+  apiKey: "VOTRE_API_KEY",
+  authDomain: "VOTRE_PROJET.firebaseapp.com",
+  databaseURL: "https://VOTRE_PROJET-default-rtdb.firebaseio.com",
+  projectId: "VOTRE_PROJET",
+  appId: "VOTRE_APP_ID"
+};
+
+/* ========= 2. RÈGLES DU JEU (modifiables) ========= */
+const N = 14, RACK = 7;
+const CENTER = {"6_6":5,"6_7":6,"7_6":7,"7_7":8}; // tuiles de départ
+// Quart supérieur gauche (7x7), miroir pour le reste. 3=×3 2=×2 + - x / = opération imposée
+const QUAD = [
+  "3..2..3",
+  ".2..-..",
+  "..2..x.",
+  "2..+..2",
+  "..x..2.",
+  ".-..2..",
+  "3..2../"
+];
+const bagCounts = () => {
+  const c = {};
+  for (let i = 0; i <= 9; i++) c[i] = 6;
+  for (let i = 10; i <= 20; i++) c[i] = 2;
+  [21,24,25,27,28,30,32,35,36,40,42,45,48,49,54,56,63,64,72,81,90].forEach(v => c[v] = 1);
+  return c;
+};
+
+/* ========= 3. OUTILS ========= */
+const $ = id => document.getElementById(id);
+const key = (r, c) => r + "_" + c;
+function special(r, c) {
+  const qr = r < 7 ? r : 13 - r, qc = c < 7 ? c : 13 - c;
+  if (CENTER[key(r, c)]) return ".";
+  return QUAD[qr][qc];
+}
+function ops(a, b) { // résultats possibles de a ? b
+  const o = {"+": a + b, "x": a * b, "-": Math.abs(a - b)};
+  const hi = Math.max(a, b), lo = Math.min(a, b);
+  if (lo > 0 && hi % lo === 0) o["/"] = hi / lo;
+  return o;
+}
+function evaluate(board, r, c, v) { // renvoie le nombre de calculs valides
+  const sp = special(r, c);
+  const forced = "+-x/".includes(sp) && sp !== "." ? sp : null;
+  const get = (rr, cc) => board[key(rr, cc)];
+  let n = 0;
+  const check = (a, b) => {
+    if (a === undefined || b === undefined) return;
+    const o = ops(a, b);
+    for (const k in o) if (o[k] === v && (!forced || forced === k)) n++;
+  };
+  [[0,1],[0,-1],[1,0],[-1,0]].forEach(([dr, dc]) => check(get(r + dr, c + dc), get(r + 2*dr, c + 2*dc)));
+  check(get(r, c - 1), get(r, c + 1));
+  check(get(r - 1, c), get(r + 1, c));
+  return n;
+}
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function newState(name) {
+  const bag = [];
+  const c = bagCounts();
+  for (const v in c) for (let i = 0; i < c[v]; i++) bag.push(+v);
+  shuffle(bag);
+  const p = [{n: name, s: 0, r: bag.splice(0, RACK)}, {n: "", s: 0, r: bag.splice(0, RACK)}];
+  return {p, bag, b: {...CENTER}, t: 0, pass: 0, over: false, last: "", log: ""};
+}
+function normalize(s) {
+  if (!s) return null;
+  s.bag = s.bag || []; s.b = s.b || {}; s.p.forEach(x => x.r = x.r || []); s.last = s.last || ""; s.log = s.log || "";
+  return s;
+}
+
+/* ========= 4. ÉTAT & SYNCHRO ========= */
+let S = null, me = 0, mode = null, ref = null, db = null, sel = -1;
+const fbOK = !firebaseConfig.apiKey.startsWith("VOTRE");
+if (fbOK) { firebase.initializeApp(firebaseConfig); db = firebase.database(); }
+else $("fbInfo").textContent = "Firebase n’est pas configuré : seul le mode « même écran » fonctionne.";
+
+function save() { if (mode === "online") ref.set(S); else render(); }
+function listen(code) {
+  ref = db.ref("mathable/" + code);
+  ref.on("value", snap => { S = normalize(snap.val()); if (S) render(); });
+}
+function start() { $("lobby").style.display = "none"; $("game").style.display = "flex"; }
+
+$("bCreate").onclick = async () => {
+  if (!fbOK) return alert("Configure d’abord Firebase dans index.html.");
+  const name = $("name").value.trim() || "Joueur 1";
+  const code = Math.random().toString(36).slice(2, 7).toUpperCase();
+  mode = "online"; me = 0;
+  await db.ref("mathable/" + code).set(newState(name));
+  listen(code); start(); say("Code de la partie : " + code + " — donne-le à ton adversaire.");
+  window._code = code;
+};
+$("bJoin").onclick = async () => {
+  if (!fbOK) return alert("Configure d’abord Firebase dans index.html.");
+  const code = $("code").value.trim().toUpperCase();
+  const snap = await db.ref("mathable/" + code).once("value");
+  const s = normalize(snap.val());
+  if (!s) return alert("Aucune partie avec ce code.");
+  if (s.p[1].n) return alert("Cette partie a déjà deux joueurs.");
+  s.p[1].n = $("name").value.trim() || "Joueur 2";
+  mode = "online"; me = 1; window._code = code;
+  await db.ref("mathable/" + code).set(s);
+  listen(code); start();
+};
+$("bLocal").onclick = () => {
+  const n = $("name").value.trim() || "Joueur 1";
+  S = normalize(newState(n)); S.p[1].n = "Joueur 2"; mode = "local"; start(); render();
+};
+$("bQuit").onclick = () => { if (ref) ref.off(); location.reload(); };
+
+/* ========= 5. ACTIONS ========= */
+function me_() { return mode === "local" ? S.t : me; }
+function say(t, err) { const m = $("msg"); m.textContent = t; m.className = err ? "err" : ""; }
+
+function play(r, c) {
+  if (!S || S.over || !S.p[1].n || S.t !== me_()) return;
+  if (sel < 0) return say("Choisis d’abord une tuile.", true);
+  if (S.b[key(r, c)] !== undefined) return;
+  const rack = S.p[S.t].r, v = rack[sel];
+  const n = evaluate(S.b, r, c, v);
+  if (n === 0) return say("Ce " + v + " ne correspond à aucun calcul ici.", true);
+  const sp = special(r, c);
+  const mult = sp === "2" ? 2 : sp === "3" ? 3 : 1;
+  const pts = v * n * mult;
+  S.b[key(r, c)] = v; S.last = key(r, c);
+  rack.splice(sel, 1);
+  while (rack.length < RACK && S.bag.length) rack.push(S.bag.pop());
+  S.p[S.t].s += pts; S.pass = 0;
+  S.log = S.p[S.t].n + " pose " + v + " : +" + pts + " pt" + (pts > 1 ? "s" : "") + " (" + n + " calcul" + (n > 1 ? "s" : "") + ")";
+  if (!rack.length && !S.bag.length) S.over = true;
+  S.t = 1 - S.t; sel = -1; save();
+}
+$("bPass").onclick = () => {
+  if (!S || S.over || S.t !== me_()) return;
+  S.pass++; S.log = S.p[S.t].n + " passe son tour.";
+  if (S.pass >= 2) S.over = true;
+  S.t = 1 - S.t; sel = -1; save();
+};
+
+/* ========= 6. AFFICHAGE ========= */
+function render() {
+  const bo = $("board");
+  if (!bo.children.length) {
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      const d = document.createElement("div");
+      d.className = "cell"; d.id = "c" + key(r, c); d.tabIndex = -1;
+      d.onclick = () => play(r, c); bo.appendChild(d);
+    }
+  }
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const k = key(r, c), d = $("c" + k), v = S.b[k], sp = special(r, c);
+    let cls = "cell";
+    if (v !== undefined) cls += " t" + (S.last === k ? " last" : "");
+    else if (sp === "2") cls += " x2"; else if (sp === "3") cls += " x3"; else if ("+-x/".includes(sp)) cls += " op";
+    d.className = cls;
+    d.innerHTML = v !== undefined ? v : (sp === "2" ? "<i>×2</i>" : sp === "3" ? "<i>×3</i>" : sp === "x" ? "<i>×</i>" : sp === "-" ? "<i>−</i>" : sp === "/" ? "<i>÷</i>" : sp === "+" ? "<i>+</i>" : "");
+  }
+  $("players").innerHTML = S.p.map((p, i) =>
+    '<div class="pl' + (S.t === i && !S.over ? " turn" : "") + '"><b>' + esc(p.n || "En attente…") + (mode === "online" && i === me ? " (toi)" : "") + "</b><span>" + p.s + "</span></div>").join("") +
+    '<div class="pl"><b>Pioche</b><span>' + S.bag.length + "</span></div>";
+  const mine = S.p[me_()].r, myTurn = S.t === me_() && !S.over && S.p[1].n;
+  $("rack").innerHTML = "";
+  mine.forEach((v, i) => {
+    const b = document.createElement("button");
+    b.className = "rt" + (i === sel ? " sel" : ""); b.textContent = v; b.disabled = !myTurn;
+    b.onclick = () => { sel = sel === i ? -1 : i; render(); };
+    $("rack").appendChild(b);
+  });
+  $("bPass").disabled = !myTurn;
+  if (!S.p[1].n) say("En attente d’un adversaire — code : " + (window._code || ""));
+  else if (S.over) {
+    const [a, b] = S.p;
+    $("over").textContent = a.s === b.s ? "Égalité !" : "Victoire de " + (a.s > b.s ? a.n : b.n) + " (" + Math.max(a.s, b.s) + " pts)";
+    say(S.log);
+  } else say(S.log || (myTurn ? "À toi de jouer." : "Au tour de " + S.p[S.t].n + "…"));
+}
+function esc(s) { return s.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+</script>
+</body>
+</html>
