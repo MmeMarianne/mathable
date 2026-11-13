@@ -47,6 +47,7 @@ button:focus-visible,input:focus-visible,.cell:focus-visible{outline:3px solid #
   <div class="row"><button class="main" id="bCreate">Créer une partie</button></div>
   <div class="row"><input id="code" placeholder="Code de la partie" maxlength="5" autocomplete="off"><button id="bJoin">Rejoindre</button></div>
   <button id="bLocal">Jouer à deux sur le même écran</button>
+  <div class="row"><button id="bCpuEasy">Contre l’ordinateur : facile</button><button id="bCpuHard">Contre l’ordinateur : difficile</button></div>
   <small id="fbInfo"></small>
 </div>
 
@@ -194,10 +195,18 @@ $("bLocal").onclick = () => {
   const n = $("name").value.trim() || "Joueur 1";
   S = normalize(newState(n)); S.p[1].n = "Joueur 2"; mode = "local"; start(); render();
 };
+let cpuLevel = "hard", cpuTimer = null;
+function startCpu(level) {
+  cpuLevel = level; me = 0; mode = "cpu";
+  S = normalize(newState($("name").value.trim() || "Joueur"));
+  S.p[1].n = "Ordinateur"; start(); render();
+}
+$("bCpuEasy").onclick = () => startCpu("easy");
+$("bCpuHard").onclick = () => startCpu("hard");
 $("bQuit").onclick = () => { if (ref) ref.off(); location.reload(); };
 
 /* ========= 5. ACTIONS ========= */
-function me_() { return mode === "local" ? S.t : me; }
+function me_() { return mode === "local" ? S.t : mode === "cpu" ? 0 : me; }
 function say(t, err) { const m = $("msg"); m.textContent = t; m.className = err ? "err" : ""; }
 
 function play(r, c) {
@@ -207,16 +216,41 @@ function play(r, c) {
   const rack = S.p[S.t].r, v = rack[sel];
   const n = evaluate(S.b, r, c, v);
   if (n === 0) return say("Ce " + v + " ne correspond à aucun calcul ici.", true);
-  const sp = special(r, c);
-  const mult = sp === "2" ? 2 : sp === "3" ? 3 : 1;
-  const pts = v * n * mult;
+  commit(r, c, sel); sel = -1; save();
+}
+function points(r, c, v) {
+  const n = evaluate(S.b, r, c, v), sp = special(r, c);
+  return {n, pts: v * n * (sp === "2" ? 2 : sp === "3" ? 3 : 1)};
+}
+function commit(r, c, i) { // applique un coup déjà validé (humain ou ordinateur)
+  const rack = S.p[S.t].r, v = rack[i], {n, pts} = points(r, c, v);
   S.b[key(r, c)] = v; S.last = key(r, c);
-  rack.splice(sel, 1);
+  rack.splice(i, 1);
   while (rack.length < RACK && S.bag.length) rack.push(S.bag.pop());
   S.p[S.t].s += pts; S.pass = 0;
   S.log = S.p[S.t].n + " pose " + v + " : +" + pts + " pt" + (pts > 1 ? "s" : "") + " (" + n + " calcul" + (n > 1 ? "s" : "") + ")";
   if (!rack.length && !S.bag.length) S.over = true;
-  S.t = 1 - S.t; sel = -1; save();
+  S.t = 1 - S.t;
+}
+function cpuMove() {
+  const rack = S.p[1].r, moves = [];
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    if (S.b[key(r, c)] !== undefined) continue;
+    rack.forEach((v, i) => { const p = points(r, c, v); if (p.n) moves.push({r, c, i, pts: p.pts}); });
+  }
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  if (moves.length) {
+    let pool = moves;
+    if (cpuLevel === "hard") { const best = Math.max(...moves.map(m => m.pts)); pool = moves.filter(m => m.pts === best); }
+    const m = pick(pool); commit(m.r, m.c, m.i);
+  } else if (S.bag.length) {
+    const i = Math.floor(Math.random() * rack.length), nv = S.bag.pop();
+    S.bag.push(rack[i]); rack[i] = nv; shuffle(S.bag);
+    S.pass = 0; S.log = "Ordinateur échange une tuile."; S.t = 0;
+  } else {
+    S.pass++; S.log = "Ordinateur passe son tour."; if (S.pass >= 2) S.over = true; S.t = 0;
+  }
+  render();
 }
 $("bSwap").onclick = () => {
   if (!S || S.over || S.t !== me_()) return;
@@ -263,6 +297,9 @@ function render() {
     b.onclick = () => { sel = sel === i ? -1 : i; render(); };
     $("rack").appendChild(b);
   });
+  if (mode === "cpu" && S.t === 1 && !S.over && !cpuTimer) {
+    cpuTimer = setTimeout(() => { cpuTimer = null; if (mode === "cpu" && S.t === 1 && !S.over) cpuMove(); }, 900);
+  }
   $("bPass").disabled = !myTurn;
   $("bSwap").disabled = !myTurn || !S.bag.length;
   if (!S.p[1].n) say("En attente d’un adversaire — code : " + (window._code || ""));
